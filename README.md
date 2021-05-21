@@ -1,2 +1,4 @@
 # archivist-shell
-Repository for convenience scripts for the Jitsin Archivst system
+
+Repository for convenience scripts for the Jitsuin Archivist system
+
