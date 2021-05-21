@@ -1,0 +1,13 @@
+version: '3'
+
+tasks:
+
+  check:
+    desc: Standard linting of shell scripts
+    cmds:
+      - shellcheck scripts/*.sh
+
+  clean:
+    desc: Clean git repo
+    cmds:
+      - git clean -fdX
