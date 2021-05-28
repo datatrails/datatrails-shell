@@ -1,6 +1,6 @@
 # archivist-shell
 
-Repository for convenience scripts for the Jitsuin Archivist system
+Repository for convenience scripts for the Jitsuin Archivist system.
 
 # Development
 
@@ -8,10 +8,72 @@ Repository for convenience scripts for the Jitsuin Archivist system
 
 Required tools for this repo are task-runner and shellcheck.
 
-Install task runner: https://github.com/go-task/task
-Install shellcheck: https://github.com/koalaman/shellcheck#user-content-installing
+   - Install task runner: https://github.com/go-task/task
+   - Install shellcheck: https://github.com/koalaman/shellcheck#user-content-installing
 
 ## Workflow
+
+### Preparation
+
+Reference: https://gist.github.com/Chaser324/ce0505fbed06b947d962
+
+Fork the repo using the 'Fork' dialog at the top right corner of the github UI.
+
+Clone the new fork into your local development environment (assuming your github
+login is 'githubUserHandle'):
+
+> Note: all references to 'git@github.com' assume that your local github user has adequate
+> rights. If using ~/.ssh/config to manage ssh identities then replace all mentions of
+> 'git@github.com' with the clause name in ~/.ssh/config which references the appropriate
+> ssh key::
+> 
+> For example:
+```
+Host ssh-githubUserHandle
+    User git
+    Hostname github.com
+    PreferredAuthentications publickey
+    IdentityFile ~/.ssh/id_rsa_githubUserHandle
+
+Host ssh-otherUserHandle
+    User git
+    Hostname github.com
+    PreferredAuthentications publickey
+    IdentityFile ~/.ssh/id_rsa_otherUserHandle
+
+Host *
+    IdentitiesOnly yes
+
+```
+> i.e. 'githubUserHandle' viz:
+>
+>    git clone ssh-githubUserHandle:githubUserHandle/archivist-shell.git
+>
+
+
+```bash
+mkdir githubUserHandle
+cd githubUserHandle
+git clone ssh-githubUserHandle:githubUserHandle/archivist-shell.git
+```
+
+Enter the new cloned fork and add the original upstream repo as a remote:
+
+```bash
+cd archivist-shell
+git remote add upstream ssh-githubUserHandle:jitsuin-inc/archivist-shell.git
+git remote -v
+```
+
+Now add a branch for your proposed changes:
+
+```bash
+git status
+git checkout -b dev/githubUserHandle/some-proposed-fix
+git status
+```
+
+### Making changes
 
 To see what options are available simply execute:
 
@@ -25,4 +87,95 @@ Make a change to the code and validate the changes:
 task check
 ```
 
+### Seeking a review
+
+#### Synchronizing the upstream
+
+Bring in latest changes from upstream:
+
+```bash
+git fetch upstream
+git checkout main
+git pull --rebase upstream main
+git checkout dev/githubUserHandle/some-proposed-fix
+git rebase -i --autosquash main
+```
+> Caveat
+>
+> Note that we are rebasing to pull in upstream changes. This assumes that
+> the branch is only accessed/written by one person. If the branch is
+> collaborative the better option is to 'git merge main' as this is
+> safer but pollutes the git history with merge commits.
+> See https://www.atlassian.com/git/tutorials/merging-vs-rebasing#the-golden-rule-of-rebasing 
+>
+> This caveat applies to all occurrences of 'git rebase' in this document.
+
+
+Ensure that your email and name are correct:
+
+```bash
+git config user.name
+git config user.email
+```
+
+#### Pushing changes upstream
+
+Add all changes to a commit using the **example-commit** file as a template
+for the commit message.
+
+```bash
+git add .
+git commit
+```
+
+Push the changes upstream(the set-upstream option is only required the first time this is executed):
+
+```bash
+git push --set-upstream origin dev/githubUserHandle/some-proposed-fix
+```
+
+Enter the github ui at https://github.com/jitsuin-inc/archivist-shell and 
+generate a pull request.
+
+Reviewers will be notified when a PR is generated and you will receive feedback.
+Reviewers will trigger QC checks on your code. Failure will result in
+automatic rejection.
+
+#### Making further changes
+
+If changes are requested push the changes as a fixup:
+
+```bash
+git add .
+git commit --fixup HEAD
+git push
+```
+
+#### Removing Fixups After Reviewer Approval
+
+Eventually the reviewer(s) will approve your changes. At this point you must
+squash all your fixups after syncing upstream:
+
+```bash
+git fetch upstream
+git checkout main
+git pull --rebase upstream main
+git checkout dev/githubUserHandle/some-proposed-fix
+git rebase -i --autosquash main
+git push -f
+```
+
+#### PR is merged.
+
+The reviewer will then merge your PR into main.
+
+At this point one must tidy up the local fork:
+
+```bash
+git fetch upstream
+git checkout main
+git pull
+git log
+git branch -d dev/githubUserHandle/some-proposed-fix
+```
 

@@ -1,8 +1,5 @@
 
-on:
-  push:
-    branch:
-      - main
+on: [push, pull_request]
 
 name: 'Trigger: Push action'
 
