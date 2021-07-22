@@ -5,7 +5,7 @@ tasks:
   check:
     desc: Standard linting of shell scripts
     cmds:
-      - shellcheck scripts/*.sh
+      - find scripts -type f -name '*.sh' | xargs shellcheck
 
   clean:
     desc: Clean git repo
