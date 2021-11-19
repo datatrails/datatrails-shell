@@ -26,6 +26,13 @@ then
     echo "syft command not found"
     exit 10
 fi
+JQ=$(which jq)
+if [ -z "${JQ}" ]
+then
+    JQ="cat"
+else
+    JQ="jq ."
+fi
 
 set -e
 set -u
@@ -59,7 +66,7 @@ Usage: $SCRIPTNAME [-c clientsecretfile] [-o output format] [-s sbomFile ] [-u u
 
 Example:
 
-    $0 -o spdx 29b48af4-45ca-465b-b136-206674f8aa9b ubuntu:21.10
+    $0 29b48af4-45ca-465b-b136-206674f8aa9b ubuntu:21.10
 
 EOF
 
@@ -172,6 +179,6 @@ then
     log "Upload failure ${HTTP_STATUS}"
     exit 4
 fi
-UUID=$(cat "${TEMPDIR}/upload")
-log "Upload success: uuid=${UUID}"
+log "Upload success: "
+${JQ} "${TEMPDIR}/upload"
 exit 0
