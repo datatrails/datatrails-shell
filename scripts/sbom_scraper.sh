@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 #
-# Scrape a docker image and upload as SBOM file
+# Scrape a docker image and upload as public or private SBOM file 
 #
 # Preparation:
 #
@@ -48,20 +48,22 @@ FORMAT=cyclonedx
 # credentials directory has 0600 permissions
 CLIENTSECRET_FILE=credentials/client_secret
 SBOM=false
+PRIVACY=PUBLIC
 
 URL=https://app.rkvst.io
 
 usage() {
     cat >&2 <<EOF
 
-Scrape an SBOM from a docker image
+Scrape an SBOM from a docker image and upload to abom archivist
 
-Usage: $SCRIPTNAME [-c clientsecretfile] [-o output format] [-s sbomFile ] [-u url] client_id [docker-image|sbom file]
+Usage: $SCRIPTNAME [-p] [-c clientsecretfile] [-o output format] [-s sbomFile ] [-u url] client_id [docker-image|sbom file]
 
    -c clientsecretfile containing client secret (default ${CLIENTSECRET_FILE})
    -o FORMAT           default ($FORMAT) [cyclonedx]
    -s                  default ($SBOM) if specified the second argument is an sbom file
                        and -o is ignored.
+   -p                  upload private SBOM
    -u URL              URL Default ($URL)
 
 Example:
@@ -73,11 +75,13 @@ EOF
     exit 1
 }
 
-while getopts "c:ho:su:" o; do
+while getopts "c:ho:psu:" o; do
     case "${o}" in
         c) CLIENTSECRET_FILE="${OPTARG}"
            ;;
         o) FORMAT=${OPTARG}
+           ;;
+        p) PRIVACY=PRIVATE
            ;;
         s) SBOM=true
            ;;
@@ -165,14 +169,14 @@ EOF
 # ----------------------------------------------------------------------------
 # Upload SBOM
 # ----------------------------------------------------------------------------
-log "Upload ${OUTPUT}"
+log "Upload ${PRIVACY} ${OUTPUT}"
 
 HTTP_STATUS=$(curl -s -w "%{http_code}" -X POST \
     -o "${TEMPDIR}/upload" \
     -H "@${BEARER_TOKEN_FILE}" \
     -H "content_type=text/xml" \
     -F "sbom=@${OUTPUT}" \
-    "${URL}/archivist/v1/sboms")
+    "${URL}/archivist/v1/sboms?privacy=${PRIVACY}")
 
 if [ "${HTTP_STATUS}" != "200" ]
 then
