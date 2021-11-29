@@ -20,7 +20,7 @@
 
 SCRIPTNAME=$(basename "$0")
 
-for TOOL in syft jq xq xmllint python3
+for TOOL in syft jq xq xmllint python3 openssl curl shasum
 do
     if ! type $TOOL > /dev/null
     then
@@ -34,25 +34,38 @@ set -u
 
 LOGTAG=$$
 log() {
-    echo "${LOGTAG}:$(date ):$*"
+    echo "${LOGTAG}:$(date):$*"
 }
 
-GIT_STATUS=$(git status --porcelain)
+# ----------------------------------------------------------------------------
+# Option parsing
+# ----------------------------------------------------------------------------
 
-# defaults
+# Prepare defaults
+if type git > /dev/null 2>&1 && git rev-parse --git-dir > /dev/null 2>&1
+then
+    # we are in a git repo so set defaults using git
+    GIT_STATUS=$(git status --porcelain)
+
+    AUTHOR_NAME="$(git config user.name || echo "$USER")"
+    AUTHOR_EMAIL="$(git config user.email || true)"
+    TOOL_NAME="$(git config --get remote.origin.url) $(git ls-files --full-name "$SCRIPTNAME")"
+    TOOL_VERSION=$(git describe --tags)${GIT_STATUS:++}
+else
+    AUTHOR_NAME="$USER"
+    AUTHOR_EMAIL=""
+    TOOL_NAME="$SCRIPTNAME"
+    TOOL_VERSION="unknown"
+fi
+
 FORMAT=cyclonedx
-AUTHOR_NAME="$(git config user.name)"
-AUTHOR_EMAIL="$(git config user.email)"
 COMPONENT_AUTHOR_NAME="$AUTHOR_NAME"
 SUPPLIER_NAME=dockerhub
 SUPPLIER_URL=https://hub.docker.com
-TOOL_NAME="$(git config --get remote.origin.url) $(git ls-files --full-name "$SCRIPTNAME")"
-TOOL_VERSION=$(git describe --tags)${GIT_STATUS:++}
 TOOL_VENDOR="Jitsuin Inc"
 TOOL_HASH_ALG=SHA-256
 # shellcheck disable=SC2002
-TOOL_HASH_CONTENT=$(cat "$0" | openssl dgst -sha256)
-
+TOOL_HASH_CONTENT=$(shasum -a 256 "$0" | cut -d' ' -f1)
 # credentials directory should have 0700 permissions
 CLIENTSECRET_FILE=credentials/client_secret
 SBOM=false
@@ -68,7 +81,7 @@ Create a Cyclone DX 1.2 XML SBOM from a docker image and upload to RKVST SBOM Hu
 Usage: $SCRIPTNAME [-a AUTHOR_NAME] [-A AUTHOR_NAME] [-c CLIENT_SECRET_FILE] [-e AUTHOR_EMAIL] [-s] [-p] [-u URL] CLIENT_ID [docker-image:tag|sbom file]
 
    -a AUTHOR             name of the author of the SBOM.  Default ($AUTHOR_NAME)
-   -A COMPONENT_AUTHOR   name of the author of the docker image.  Default ($COMPONENT_AUTHOR_NAME)
+   -A COMPONENT_AUTHOR   name of the author and publisher of the docker image.  Default ($COMPONENT_AUTHOR_NAME)
    -c CLIENT_SECRET_FILE containing client secret (default ${CLIENTSECRET_FILE})
    -e AUTHOR_EMAIL       email address of the author of the SBOM.  Default ($AUTHOR_EMAIL)
    -s                    if specified the second argument is an sbom file.
@@ -189,6 +202,7 @@ echo "    supplier:"
 echo "      name: $SUPPLIER_NAME"
 echo "      url: $SUPPLIER_URL"
 echo "    author: $COMPONENT_AUTHOR_NAME"
+echo "    publisher: $COMPONENT_AUTHOR_NAME"
 echo "    name: $ORIG_COMPONENT_NAME -> $COMPONENT_NAME"
 echo "    version: $ORIG_COMPONENT_VERSION -> $COMPONENT_VERSION"
 echo "    hashes:"
@@ -198,11 +212,9 @@ echo "        content: $COMPONENT_HASH_CONTENT"
 
 [ -z "$TOOL_VENDOR" ] && echo >&2 "Unable to determine SBOM tool vendor" && exit 1
 [ -z "$TOOL_NAME" ] && echo >&2 "Unable to determine SBOM tool name" && exit 1
-[ -z "$TOOL_VERSION" ] && echo >&2 "Unable to determine SBOM tool version" && exit 1
 [ -z "$TOOL_HASH_ALG" ] && echo >&2 "Unable to determine SBOM tool hash algorithm" && exit 1
 [ -z "$TOOL_HASH_CONTENT" ] && echo >&2 "Unable to determine SBOM tool hash content" && exit 1
 [ -z "$AUTHOR_NAME" ] && echo >&2 "Unable to determine SBOM author name" && exit 1
-[ -z "$AUTHOR_EMAIL" ] && echo >&2 "Unable to determine SBOM author email" && exit 1
 [ -z "$SUPPLIER_NAME" ] && echo >&2 "Unable to determine component supplier name" && exit 1
 [ -z "$SUPPLIER_URL" ] && echo >&2 "Unable to determine component supplier url" && exit 1
 [ -z "$COMPONENT_AUTHOR_NAME" ] && echo >&2 "Unable to determine component author name" && exit 1
@@ -264,7 +276,12 @@ ET.SubElement(author, 'email').text = '$AUTHOR_EMAIL'
 
 component = metadata.find('component', ns)
 
-# Update component author
+# Update component publisher and author
+publisher = component.find('publisher', ns)
+if not publisher:
+    publisher = ET.Element('publisher')
+    component.insert(0, publisher)
+publisher.text = '$COMPONENT_AUTHOR_NAME'
 author = component.find('author', ns)
 if not author:
     author = ET.Element('author')
