@@ -18,6 +18,7 @@
 # Use the CLIENT_ID as the first fixed argument to this script.
 # 
 
+SCRIPTDIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" >/dev/null 2>&1 && pwd )"
 SCRIPTNAME=$(basename "$0")
 
 for TOOL in syft jq xq xmllint python3 openssl curl shasum
@@ -42,6 +43,7 @@ log() {
 # ----------------------------------------------------------------------------
 
 # Prepare defaults
+pushd "$SCRIPTDIR" > /dev/null
 if type git > /dev/null 2>&1 && git rev-parse --git-dir > /dev/null 2>&1
 then
     # we are in a git repo so set defaults using git
@@ -57,6 +59,7 @@ else
     TOOL_NAME="$SCRIPTNAME"
     TOOL_VERSION="unknown"
 fi
+popd > /dev/null
 
 FORMAT=cyclonedx
 COMPONENT_AUTHOR_NAME="$AUTHOR_NAME"
@@ -67,7 +70,7 @@ TOOL_HASH_ALG=SHA-256
 # shellcheck disable=SC2002
 TOOL_HASH_CONTENT=$(shasum -a 256 "$0" | cut -d' ' -f1)
 # credentials directory should have 0700 permissions
-CLIENTSECRET_FILE=credentials/client_secret
+CLIENTSECRET_FILE=$SCRIPTDIR/../credentials/client_secret
 SBOM=false
 PRIVACY=PUBLIC
 
@@ -323,13 +326,13 @@ END
 # ----------------------------------------------------------------------------
 # Check that the patched SBOM is valid against the cyclonedx schema
 # ----------------------------------------------------------------------------
-[ -f spdx.xsd ] || curl -fsS -o spdx.xsd https://cyclonedx.org/schema/spdx
-[ -f cyclonedx.xsd ] || curl -fsS -o cyclonedx.xsd https://cyclonedx.org/schema/bom/1.2
+[ -f "$SCRIPTDIR"/spdx.xsd ] || curl -fsS -o "$SCRIPTDIR"/spdx.xsd https://cyclonedx.org/schema/spdx
+[ -f "$SCRIPTDIR"/cyclonedx.xsd ] || curl -fsS -o "$SCRIPTDIR"/cyclonedx.xsd https://cyclonedx.org/schema/bom/1.2
 
 # xmllint complains about a double import of the spdx schema, but we have to import via
 # the wrapper to set the schema location to a local file, as xmllint fails to download
 # them from the internet as they are https
-xmllint "$PATCHED_OUTPUT" --schema cyclonedx-wrapper.xsd --noout 2>&1 | grep -Fv "Skipping import of schema located at 'http://cyclonedx.org/schema/spdx' for the namespace 'http://cyclonedx.org/schema/spdx'"
+xmllint "$PATCHED_OUTPUT" --schema "$SCRIPTDIR"/cyclonedx-wrapper.xsd --noout 2>&1 | grep -Fv "Skipping import of schema located at 'http://cyclonedx.org/schema/spdx' for the namespace 'http://cyclonedx.org/schema/spdx'"
 [ "${PIPESTATUS[0]}" -ne 0 ] && exit "${PIPESTATUS[0]}"
 
 # ----------------------------------------------------------------------------
