@@ -41,39 +41,27 @@ log() {
 # ----------------------------------------------------------------------------
 # Option parsing
 # ----------------------------------------------------------------------------
-
-# Prepare defaults
-pushd "$SCRIPTDIR" > /dev/null
-if type git > /dev/null 2>&1 && git rev-parse --git-dir > /dev/null 2>&1
-then
-    # we are in a git repo so set defaults using git
-    GIT_STATUS=$(git status --porcelain)
-
-    AUTHOR_NAME="$(git config user.name || echo "$USER")"
-    AUTHOR_EMAIL="$(git config user.email || true)"
-    TOOL_NAME="$(git config --get remote.origin.url) $(git ls-files --full-name "$SCRIPTNAME")"
-    TOOL_VERSION=$(git describe --tags)${GIT_STATUS:++}
-else
-    AUTHOR_NAME="$USER"
-    AUTHOR_EMAIL=""
-    TOOL_NAME="$SCRIPTNAME"
-    TOOL_VERSION="unknown"
-fi
-popd > /dev/null
-
-FORMAT=cyclonedx
-COMPONENT_AUTHOR_NAME="$AUTHOR_NAME"
-SUPPLIER_NAME=dockerhub
-SUPPLIER_URL=https://hub.docker.com
+TOOL_NAME="https://github.com/jitsuin-inc/archivist-shell $SCRIPTNAME"
+#
+# Set this value just before release
+TOOL_VERSION="v0.3.5"
 TOOL_VENDOR="Jitsuin Inc"
 TOOL_HASH_ALG=SHA-256
+TOOL_HASH_CONTENT=$(shasum -a 256 "$0" | cut -d' ' -f1)
+
+DEFAULT_AUTHOR_NAME="$USER"
+AUTHOR_NAME="$DEFAULT_AUTHOR_NAME"
+AUTHOR_EMAIL=""
+
+FORMAT=cyclonedx
+COMPONENT_AUTHOR_NAME="$DEFAULT_AUTHOR_NAME"
 SBOM_UPLOAD_TIMEOUT=10
 # shellcheck disable=SC2002
-TOOL_HASH_CONTENT=$(shasum -a 256 "$0" | cut -d' ' -f1)
 # credentials directory should have 0700 permissions
 CLIENTSECRET_FILE=$SCRIPTDIR/../credentials/client_secret
 SBOM=false
 PRIVACY=PUBLIC
+JARFILE=false
 
 URL=https://app.rkvst.io
 
@@ -82,7 +70,7 @@ usage() {
 
 Create a Cyclone DX 1.2 XML SBOM from a docker image and upload to RKVST SBOM Hub
 
-Usage: $SCRIPTNAME [-a AUTHOR_NAME] [-A AUTHOR_NAME] [-c CLIENT_SECRET_FILE] [-e AUTHOR_EMAIL] [-s] [-p] [-u URL] CLIENT_ID [docker-image:tag|sbom file]
+Usage: $SCRIPTNAME [-a AUTHOR_NAME] [-A COMPONENT_AUTHOR] [-c CLIENT_SECRET_FILE] [-e AUTHOR_EMAIL] [-sp] [-u URL] CLIENT_ID [docker-image:tag|sbom file|jar URL]
 
    -a AUTHOR             name of the author of the SBOM.  Default ($AUTHOR_NAME)
    -A COMPONENT_AUTHOR   name of the author and publisher of the docker image.  Default ($COMPONENT_AUTHOR_NAME)
@@ -97,6 +85,7 @@ Examples:
 
     $0 29b48af4-45ca-465b-b136-206674f8aa9b ubuntu:21.10
     $0 -s 29b48af4-45ca-465b-b136-206674f8aa9b ./my-sbom.xml
+    $0 -s 29b48af4-45ca-465b-b136-206674f8aa9b https://repo1.maven.org/maven2/org/assertj/assertj-core/1.0.0/assertj-core-1.0.0.jar
 
 EOF
 
@@ -126,15 +115,30 @@ while getopts "a:A:c:e:hpsu:" o; do
 done
 shift $((OPTIND-1))
 
-[ $# -lt 1 ] && usage
+[ $# -lt 1 ] && echo "No client id specified" && usage
 CLIENT_ID=$1
 shift 1
-[ $# -lt 1 ] && usage
-DOCKER_IMAGE=$1
+[ $# -lt 1 ] && echo "No source specified" && usage
+SOURCE=$1
 shift 1
 
-[ $# -ge 1 ] && usage
+[ $# -ge 1 ] && echo "Spurious positional arguments specified" && usage
 
+if [ "${COMPONENT_AUTHOR_NAME}" = "${DEFAULT_AUTHOR_NAME}" ]
+then
+    COMPONENT_AUTHOR_NAME="${AUTHOR_NAME}"
+fi
+
+EXT=$(echo "${SOURCE}" | rev | cut -d '.' -f1 | rev | tr '[:upper:]' '[:lower:]')
+if [ "$EXT" = "jar" ]
+then
+    JARFILE=true
+    JARTYPE=$(echo "${SOURCE}" | cut -d':' -f1)
+    if [ "${JARTYPE}" != "https" ]
+    then
+        echo "Jar file must be specified with https URL" && usage
+    fi
+fi
 # ----------------------------------------------------------------------------
 # Setup exit handling and temporary directory
 # ----------------------------------------------------------------------------
@@ -148,7 +152,7 @@ function finalise {
 }
 trap finalise EXIT INT TERM
 
-OUTFILE=$(echo "${DOCKER_IMAGE}" | tr '/:' '-').${FORMAT}.sbom
+OUTFILE=$(echo "${SOURCE}" | tr '/:' '-').${FORMAT}.sbom
 
 # ----------------------------------------------------------------------------
 # Extract client secrets
@@ -160,59 +164,89 @@ then
 fi
 SECRET=$(cat "${CLIENTSECRET_FILE}")
 
+
 # ----------------------------------------------------------------------------
-# Extract SBOM
+# Deal with jar files - the argument should be of form
+# https://repo1.maven.org/maven2/org/assertj/assertj-core/1.0.0/assertj-core-1.0.0.jar
 # ----------------------------------------------------------------------------
-if [ "${SBOM}" = "false" ]
+if [ "${JARFILE}" = "true" ]
 then
-    log "Scrape ${FORMAT} SBOM from ${DOCKER_IMAGE} to ${OUTFILE} ..."
+    WORKDIR="${TEMPDIR}/jarfile"
+    mkdir "${WORKDIR}"
+    SUPPLIER_NAME=$(echo "${SOURCE}" | cut -d'/' -f4)
+    SUPPLIER_URL=$(echo "${SOURCE}" | cut -d'/' -f1-4)
+    (cd "${WORKDIR}" && curl -sSO "${SOURCE}")
+    pushd "${WORKDIR}" > /dev/null
+    INPUT=$(ls)
+    OUTFILE=${INPUT}.${FORMAT}.sbom
     OUTPUT="${TEMPDIR}/${OUTFILE}"
-    syft -q packages -o "${FORMAT}" "${DOCKER_IMAGE}"> "${OUTPUT}"
+    syft -q packages --scope all-layers -o "${FORMAT}" "file:${INPUT}" > "${OUTPUT}"
+    popd > /dev/null
+
+    COMPONENT_NAME=$(xq -r .bom.metadata.component.name "$OUTPUT")
+    COMPONENT_VERSION=$(xq -r .bom.components.component.version  "${OUTPUT}")
+    ORIG_COMPONENT_NAME="${COMPONENT_NAME}"
+    ORIG_COMPONENT_VERSION="${COMPONENT_VERSION}"
+    COMPONENT_HASH_ALG=
+    COMPONENT_HASH_CONTENT=
 else
-    OUTPUT="${DOCKER_IMAGE}"
+# ----------------------------------------------------------------------------
+# Deal with dockerfiles - assume that raw sbom files originally came from
+# docker image
+# ----------------------------------------------------------------------------
+    SUPPLIER_NAME=dockerhub
+    SUPPLIER_URL=https://hub.docker.com
+    if [ "${SBOM}" = "false" ]
+    then
+        log "Scrape ${FORMAT} SBOM from ${SOURCE} to ${OUTFILE} ..."
+        OUTPUT="${TEMPDIR}/${OUTFILE}"
+        syft -q packages --scope all-layers -o "${FORMAT}" "${SOURCE}"> "${OUTPUT}"
+    else
+        OUTPUT="${SOURCE}"
+    fi
+
+    ORIG_COMPONENT_NAME=$(xq -r .bom.metadata.component.name "$OUTPUT")
+    ORIG_COMPONENT_VERSION=$(xq -r .bom.metadata.component.version "$OUTPUT")
+    COMPONENT_NAME=${ORIG_COMPONENT_NAME%%:*}
+    COMPONENT_VERSION=${ORIG_COMPONENT_NAME##*:}
+    HASH_ALG="${ORIG_COMPONENT_VERSION%%:*}"
+    case ${HASH_ALG^^} in
+        SHA256) COMPONENT_HASH_ALG="SHA-256"
+                ;;
+        *)      echo >&2 "Unknown hash algorithm $HASH_ALG"
+                ;;
+    esac
+    COMPONENT_HASH_CONTENT="${ORIG_COMPONENT_VERSION##*:}"
 fi
 
-# ----------------------------------------------------------------------------
-# Update SBOM including NTIA minimum elments
-# ----------------------------------------------------------------------------
-ORIG_COMPONENT_NAME=$(xq -r .bom.metadata.component.name "$OUTPUT")
-ORIG_COMPONENT_VERSION=$(xq -r .bom.metadata.component.version "$OUTPUT")
-COMPONENT_NAME=${ORIG_COMPONENT_NAME%%:*}
-COMPONENT_VERSION=${ORIG_COMPONENT_NAME##*:}
-HASH_ALG="${ORIG_COMPONENT_VERSION%%:*}"
-case ${HASH_ALG^^} in
-  SHA256) COMPONENT_HASH_ALG="SHA-256"
-          ;;
-  *)      echo >&2 "Unknonwn hash algorithm $HASH_ALG"
-esac
-COMPONENT_HASH_CONTENT="${ORIG_COMPONENT_VERSION##*:}"
-
-echo "metadata:"
-echo "  tools:"
-echo "    tool:"
-echo "      vendor: $TOOL_VENDOR"
-echo "      name: $TOOL_NAME"
-echo "      version: $TOOL_VERSION"
-echo "      hashes:"
-echo "        hash:"
-echo "          alg: $TOOL_HASH_ALG"
-echo "          content: $TOOL_HASH_CONTENT"
-echo "  authors:"
-echo "    author:"
-echo "      name: $AUTHOR_NAME"
-echo "      email: $AUTHOR_EMAIL"
-echo "  component:"
-echo "    supplier:"
-echo "      name: $SUPPLIER_NAME"
-echo "      url: $SUPPLIER_URL"
-echo "    author: $COMPONENT_AUTHOR_NAME"
-echo "    publisher: $COMPONENT_AUTHOR_NAME"
-echo "    name: $ORIG_COMPONENT_NAME -> $COMPONENT_NAME"
-echo "    version: $ORIG_COMPONENT_VERSION -> $COMPONENT_VERSION"
-echo "    hashes:"
-echo "      hash:"
-echo "        alg: $COMPONENT_HASH_ALG"
-echo "        content: $COMPONENT_HASH_CONTENT"
+cat >&1 <<EOF
+metadata:
+  tools:
+    tool:
+      vendor: $TOOL_VENDOR
+      name: $TOOL_NAME
+      version: $TOOL_VERSION
+      hashes:
+        hash:
+          alg: $TOOL_HASH_ALG
+          content: $TOOL_HASH_CONTENT
+  authors:
+    author:
+      name: $AUTHOR_NAME
+      email: $AUTHOR_EMAIL
+  component:
+    supplier:
+      name: $SUPPLIER_NAME
+      url: $SUPPLIER_URL
+    author: $COMPONENT_AUTHOR_NAME
+    publisher: $COMPONENT_AUTHOR_NAME
+    name: $ORIG_COMPONENT_NAME -> $COMPONENT_NAME
+    version: $ORIG_COMPONENT_VERSION -> $COMPONENT_VERSION
+    hashes:
+      hash:
+        alg: $COMPONENT_HASH_ALG
+        content: $COMPONENT_HASH_CONTENT
+EOF
 
 [ -z "$TOOL_VENDOR" ] && echo >&2 "Unable to determine SBOM tool vendor" && exit 1
 [ -z "$TOOL_NAME" ] && echo >&2 "Unable to determine SBOM tool name" && exit 1
@@ -223,10 +257,12 @@ echo "        content: $COMPONENT_HASH_CONTENT"
 [ -z "$SUPPLIER_URL" ] && echo >&2 "Unable to determine component supplier url" && exit 1
 [ -z "$COMPONENT_AUTHOR_NAME" ] && echo >&2 "Unable to determine component author name" && exit 1
 [ -z "$COMPONENT_NAME" ] && echo >&2 "Unable to determine component name" && exit 1
-[ -z "$COMPONENT_VERSION" ] && echo >&2 "Unable to determine component version" && exit 1
-[ -z "$COMPONENT_HASH_ALG" ] && echo >&2 "Unable to determine component hash algorithm" && exit 1
-[ -z "$COMPONENT_HASH_CONTENT" ] && echo >&2 "Unable to determine component hash content" && exit 1
 
+if [ -z "$COMPONENT_VERSION" ]
+then
+    [ -z "$COMPONENT_HASH_ALG" ] && echo >&2 "Unable to determine component version or hash algorithm" && exit 1
+    [ -z "$COMPONENT_HASH_CONTENT" ] && echo >&2 "Unable to determine component hash content" && exit 1
+fi
 PATCHED_OUTPUT="${OUTPUT}.patched"
 
 python3 <(cat <<END
@@ -294,14 +330,18 @@ author.text = '$COMPONENT_AUTHOR_NAME'
 
 # Update component name and version
 component.find('name', ns).text = '$COMPONENT_NAME'
-component.find('version', ns).text = '$COMPONENT_VERSION'
+component_version = '$COMPONENT_VERSION'
+if component_version:
+    component.find('version', ns).text = component_version
 
 # Update component hash
-hashes = component.find('hashes', ns)
-if not hashes:
-    hashes = ET.SubElement(component, 'hashes')
-hash = ET.SubElement(hashes, 'hash', alg='${COMPONENT_HASH_ALG}')
-hash.text = '$COMPONENT_HASH_CONTENT'
+component_hash_alg = '${COMPONENT_HASH_ALG}'
+if component_hash_alg:
+    hashes = component.find('hashes', ns)
+    if not hashes:
+        hashes = ET.SubElement(component, 'hashes')
+    hash = ET.SubElement(hashes, 'hash', alg=component_hash_alg)
+    hash.text = '$COMPONENT_HASH_CONTENT'
 
 # Add component supplier
 supplier = component.find('supplier', ns)
@@ -328,7 +368,7 @@ END
 # Check that the patched SBOM is valid against the cyclonedx schema
 # ----------------------------------------------------------------------------
 [ -f "$SCRIPTDIR"/spdx.xsd ] || curl -fsS -o "$SCRIPTDIR"/spdx.xsd https://cyclonedx.org/schema/spdx
-[ -f "$SCRIPTDIR"/cyclonedx.xsd ] || curl -fsS -o "$SCRIPTDIR"/cyclonedx.xsd https://cyclonedx.org/schema/bom/1.2
+[ -f "$SCRIPTDIR"/cyclonedx.xsd ] || curl -fsS -o "$SCRIPTDIR"/cyclonedx.xsd https://cyclonedx.org/schema/bom/1.3
 
 # xmllint complains about a double import of the spdx schema, but we have to import via
 # the wrapper to set the schema location to a local file, as xmllint fails to download
