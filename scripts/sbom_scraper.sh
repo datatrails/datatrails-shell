@@ -67,6 +67,7 @@ SUPPLIER_NAME=dockerhub
 SUPPLIER_URL=https://hub.docker.com
 TOOL_VENDOR="Jitsuin Inc"
 TOOL_HASH_ALG=SHA-256
+SBOM_UPLOAD_TIMEOUT=10
 # shellcheck disable=SC2002
 TOOL_HASH_CONTENT=$(shasum -a 256 "$0" | cut -d' ' -f1)
 # credentials directory should have 0700 permissions
@@ -366,17 +367,32 @@ EOF
 # ----------------------------------------------------------------------------
 log "Upload ${PRIVACY} ${OUTPUT} ..."
 
-HTTP_STATUS=$(curl -s -w "%{http_code}" -X POST \
+HTTP_STATUS=$(timeout ${SBOM_UPLOAD_TIMEOUT} \
+    curl -s -w "%{http_code}" -X POST \
     -o "${TEMPDIR}/upload" \
     -H "@${BEARER_TOKEN_FILE}" \
     -H "content_type=text/xml" \
     -F "sbom=@${PATCHED_OUTPUT}" \
     "${URL}/archivist/v1/sboms?privacy=${PRIVACY}")
 
+RETURN_CODE=$?
+
+# timeout returns 124 if the command exceeded the time limit
+if [ ${RETURN_CODE} -eq 124 ]
+then
+    log "Upload failure: Timeout"
+        exit 3
+# all other non-zero return codes
+elif [ ${RETURN_CODE} -gt 0 ]
+then
+    log "Upload failure: Error code ${RETURN_CODE}"
+        exit 4
+fi
+
 if [ "${HTTP_STATUS}" != "200" ]
 then
-    log "Upload failure ${HTTP_STATUS}"
-    exit 4
+    log "Upload failure: HTTP ${HTTP_STATUS}"
+    exit 5
 fi
 log "Upload success: "
 jq . "${TEMPDIR}/upload"
