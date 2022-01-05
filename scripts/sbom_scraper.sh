@@ -30,6 +30,21 @@ do
     fi
 done
 
+SYFT_VERSION=$(syft version | grep '^Version' | tr -s ' ' | cut -d' ' -f2)
+compare_version() {
+    local x=$1
+    first=${x%%.*}          # Delete first dot and what follows.
+    last=${x##*.}           # Delete up to last dot.
+    mid=${x##"$first".}       # Delete first number and dot.
+    mid=${mid%%."$last"}      # Delete dot and last number.
+    if [ "$mid" -lt 34 ]
+    then
+        echo >&2 "syft must be at least version 0.34.0"
+        exit 10
+    fi
+}
+compare_version "${SYFT_VERSION}"
+
 set -e
 set -u
 
@@ -68,7 +83,7 @@ URL=https://app.rkvst.io
 usage() {
     cat >&2 <<EOF
 
-Create a Cyclone DX 1.2 XML SBOM from a docker image and upload to RKVST SBOM Hub
+Create a Cyclone DX 1.3 XML SBOM from a docker image and upload to RKVST SBOM Hub
 
 Usage: $SCRIPTNAME [-a AUTHOR_NAME] [-A COMPONENT_AUTHOR] [-c CLIENT_SECRET_FILE] [-e AUTHOR_EMAIL] [-sp] [-u URL] CLIENT_ID [docker-image:tag|sbom file|jar URL]
 
@@ -284,8 +299,8 @@ def indent(elem, level=0):
         if level and (not elem.tail or not elem.tail.strip()):
             elem.tail = i
 
-ET.register_namespace('', 'http://cyclonedx.org/schema/bom/1.2')
-ns = {'': 'http://cyclonedx.org/schema/bom/1.2'}
+ET.register_namespace('', 'http://cyclonedx.org/schema/bom/1.3')
+ns = {'': 'http://cyclonedx.org/schema/bom/1.3'}
 
 # Open original file
 et = ET.parse(sys.stdin)
