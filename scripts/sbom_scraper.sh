@@ -20,16 +20,30 @@
 
 SCRIPTDIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" >/dev/null 2>&1 && pwd )"
 SCRIPTNAME=$(basename "$0")
-
-for TOOL in syft jq xq xmllint python3 openssl curl shasum
+#
+# cdx - https://github.com/CycloneDX/cyclonedx-cli/releases/tag/v0.22.0
+# jar, jdeps - sudo apt install default-jre
+# syft - https://github.com/anchore/syft/releases/tag/v0.37.10
+# jq - sudo apt install jq
+# xq - python3 -m pip install --user yq
+# xmllint - sudo apt install libxml2-utils
+# python3 - should come with distro
+# openssl - sudo apt install openssl
+# curl - sudo apt install curl
+NOTFOUND=0
+for TOOL in cdx jar jdeps syft jq xq xmllint python3 openssl curl shasum
 do
     if ! type $TOOL > /dev/null
     then
         echo >&2 "please make sure this tool is on your PATH"
-        exit 10
+	NOTFOUND=$((NOTFOUND + 1))
     fi
 done
-
+if [ "$NOTFOUND" -gt 0 ]
+then
+    echo >&2 "Some tools not found"
+    exit 10
+fi
 SYFT_VERSION=$(syft version | grep '^Version' | tr -s ' ' | cut -d' ' -f2)
 compare_version() {
     local x=$1
