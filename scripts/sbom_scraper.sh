@@ -478,12 +478,12 @@ fi
 # the wrapper to set the schema location to a local file, as xmllint fails to download
 # them from the internet as they are https
 _=$(xmllint "$PATCHED_OUTPUT" --schema "$SCRIPTDIR"/cyclonedx-wrapper.xsd --noout 2>&1 | grep -Fv "Skipping import of schema located at 'http://cyclonedx.org/schema/spdx' for the namespace 'http://cyclonedx.org/schema/spdx'")
-[ "${PIPESTATUS[0]}" -ne 0 ] && cat $PATCHED_OUTPUT && exit "${PIPESTATUS[0]}"
+[ "${PIPESTATUS[0]}" -ne 0 ] && cat "${PATCHED_OUTPUT}" && exit "${PIPESTATUS[0]}"
 
 if [ "${UPLOAD}" = "false" ]
 then
     # not uploading - just output the xml
-    cat $PATCHED_OUTPUT
+    cat "${PATCHED_OUTPUT}"
 else
     # ----------------------------------------------------------------------------
     # Handle client id and secrets for SBOM scraper via App registrations
