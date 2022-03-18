@@ -91,6 +91,7 @@ CLIENTSECRET_FILE=$SCRIPTDIR/../credentials/client_secret
 SBOM=false
 PRIVACY=PUBLIC
 JARFILE=false
+UPLOAD=true
 
 URL=https://app.rkvst.io
 
@@ -106,6 +107,7 @@ Usage: $SCRIPTNAME [-a AUTHOR_NAME] [-A COMPONENT_AUTHOR] [-c CLIENT_SECRET_FILE
    -c CLIENT_SECRET_FILE containing client secret (default ${CLIENTSECRET_FILE})
    -e AUTHOR_EMAIL       email address of the author of the SBOM.  Default ($AUTHOR_EMAIL)
    -s                    if specified the second argument is an sbom file.
+   -n                    don't upload
                          Default ($SBOM) 
    -p                    upload private SBOM
    -u URL                URL of archivist SBOM hub. Default ($URL)
@@ -121,7 +123,7 @@ EOF
     exit 1
 }
 
-while getopts "a:A:c:e:hpsu:" o; do
+while getopts "a:A:c:e:hpnsu:" o; do
     case "${o}" in
         a) AUTHOR_NAME="${OPTARG}"
            ;;
@@ -130,6 +132,8 @@ while getopts "a:A:c:e:hpsu:" o; do
         c) CLIENTSECRET_FILE="${OPTARG}"
            ;;
         e) AUTHOR_EMAIL="${OPTARG}"
+           ;;
+        n) UPLOAD=false
            ;;
         p) PRIVACY=PRIVATE
            ;;
@@ -213,11 +217,17 @@ then
     popd > /dev/null
 
     COMPONENT_NAME=$(xq -r .bom.metadata.component.name "$OUTPUT")
-    COMPONENT_VERSION=$(xq -r .bom.components.component.version  "${OUTPUT}")
-    ORIG_COMPONENT_NAME="${COMPONENT_NAME}"
-    ORIG_COMPONENT_VERSION="${COMPONENT_VERSION}"
+    COMPONENT_VERSION=$(xq -r .bom.metadata.component.version  "${OUTPUT}")
+    ORIG_COMPONENT_NAME=
+    ORIG_COMPONENT_VERSION=
     COMPONENT_HASH_ALG=
     COMPONENT_HASH_CONTENT=
+    if [ "$COMPONENT_VERSION" = "null" ]
+    then
+        echo "No pom.xml in archive. Skipping $COMPONENT_NAME"
+        exit 3
+    fi
+
 else
 # ----------------------------------------------------------------------------
 # Deal with dockerfiles - assume that raw sbom files originally came from
@@ -248,6 +258,9 @@ else
     COMPONENT_HASH_CONTENT="${ORIG_COMPONENT_VERSION##*:}"
 fi
 
+if [ "$UPLOAD" = "true" ]
+then
+
 cat >&1 <<EOF
 metadata:
   tools:
@@ -277,6 +290,8 @@ metadata:
         content: $COMPONENT_HASH_CONTENT
 EOF
 
+fi
+
 [ -z "$TOOL_VENDOR" ] && echo >&2 "Unable to determine SBOM tool vendor" && exit 1
 [ -z "$TOOL_NAME" ] && echo >&2 "Unable to determine SBOM tool name" && exit 1
 [ -z "$TOOL_HASH_ALG" ] && echo >&2 "Unable to determine SBOM tool hash algorithm" && exit 1
@@ -293,6 +308,9 @@ then
     [ -z "$COMPONENT_HASH_CONTENT" ] && echo >&2 "Unable to determine component hash content" && exit 1
 fi
 PATCHED_OUTPUT="${OUTPUT}.patched"
+
+if [ "${JARFILE}" = "true" ]
+then
 
 python3 <(cat <<END
 import sys
@@ -343,7 +361,62 @@ author = ET.SubElement(authors, 'author')
 ET.SubElement(author, 'name').text = '$AUTHOR_NAME'
 ET.SubElement(author, 'email').text = '$AUTHOR_EMAIL'
 
-component = metadata.find('component', ns)
+indent(root)
+
+et.write(sys.stdout, encoding='unicode', xml_declaration=True, default_namespace='')
+END
+) < "$OUTPUT" > "$PATCHED_OUTPUT"
+
+else
+
+python3 <(cat <<END
+import sys
+import xml.etree.ElementTree as ET
+
+def indent(elem, level=0):
+    i = "\n" + level*"  "
+    if len(elem):
+        if not elem.text or not elem.text.strip():
+            elem.text = i + "  "
+        if not elem.tail or not elem.tail.strip():
+            elem.tail = i
+        for elem in elem:
+            indent(elem, level+1)
+        if not elem.tail or not elem.tail.strip():
+            elem.tail = i
+    else:
+        if level and (not elem.tail or not elem.tail.strip()):
+            elem.tail = i
+
+ET.register_namespace('', 'http://cyclonedx.org/schema/bom/1.3')
+ns = {'': 'http://cyclonedx.org/schema/bom/1.3'}
+
+# Open original file
+et = ET.parse(sys.stdin)
+root = et.getroot()
+
+metadata = root.find('metadata', ns)
+
+# Add this tool
+tools = metadata.find('tools', ns)
+if not tools:
+    tools = ET.SubElement(metadata, 'tools')
+tool = ET.SubElement(tools, 'tool')
+ET.SubElement(tool, 'vendor').text = '$TOOL_VENDOR'
+ET.SubElement(tool, 'name').text = '$TOOL_NAME'
+ET.SubElement(tool, 'version').text = '$TOOL_VERSION'
+hashes = ET.SubElement(tool, 'hashes')
+hash = ET.SubElement(hashes, 'hash', alg='${TOOL_HASH_ALG}')
+hash.text = '$TOOL_HASH_CONTENT'
+
+# Add sbom authors elements
+authors = metadata.find('authors', ns)
+if not authors:
+    authors = ET.Element('authors')
+    metadata.insert(2, authors)
+author = ET.SubElement(authors, 'author')
+ET.SubElement(author, 'name').text = '$AUTHOR_NAME'
+ET.SubElement(author, 'email').text = '$AUTHOR_EMAIL'
 
 # Update component publisher and author
 publisher = component.find('publisher', ns)
@@ -356,6 +429,8 @@ if not author:
     author = ET.Element('author')
     component.insert(0, author)
 author.text = '$COMPONENT_AUTHOR_NAME'
+
+component = metadata.find('component', ns)
 
 # Update component name and version
 component.find('name', ns).text = '$COMPONENT_NAME'
@@ -388,10 +463,10 @@ ET.SubElement(supplier, 'name').text = '$SUPPLIER_NAME'
 ET.SubElement(supplier, 'url').text = '$SUPPLIER_URL'
 
 indent(root)
-
 et.write(sys.stdout, encoding='unicode', xml_declaration=True, default_namespace='')
 END
-) < "$OUTPUT" > "$PATCHED_OUTPUT"
+)
+fi
 
 # ----------------------------------------------------------------------------
 # Check that the patched SBOM is valid against the cyclonedx schema
@@ -402,67 +477,73 @@ END
 # xmllint complains about a double import of the spdx schema, but we have to import via
 # the wrapper to set the schema location to a local file, as xmllint fails to download
 # them from the internet as they are https
-xmllint "$PATCHED_OUTPUT" --schema "$SCRIPTDIR"/cyclonedx-wrapper.xsd --noout 2>&1 | grep -Fv "Skipping import of schema located at 'http://cyclonedx.org/schema/spdx' for the namespace 'http://cyclonedx.org/schema/spdx'"
-[ "${PIPESTATUS[0]}" -ne 0 ] && exit "${PIPESTATUS[0]}"
+_=$(xmllint "$PATCHED_OUTPUT" --schema "$SCRIPTDIR"/cyclonedx-wrapper.xsd --noout 2>&1 | grep -Fv "Skipping import of schema located at 'http://cyclonedx.org/schema/spdx' for the namespace 'http://cyclonedx.org/schema/spdx'")
+[ "${PIPESTATUS[0]}" -ne 0 ] && cat $PATCHED_OUTPUT && exit "${PIPESTATUS[0]}"
 
-# ----------------------------------------------------------------------------
-# Handle client id and secrets for SBOM scraper via App registrations
-# ----------------------------------------------------------------------------
-HTTP_STATUS=""
-# get token
-log "Get token ..."
-HTTP_STATUS=$(curl -sS -w "%{http_code}" \
-    -o "${TEMPDIR}/access_token" \
-    --data-urlencode "grant_type=client_credentials" \
-    --data-urlencode "client_id=${CLIENT_ID}" \
-    --data-urlencode "client_secret=${SECRET}" \
-    "${URL}/archivist/iam/v1/appidp/token")
-if [ "${HTTP_STATUS}" != "200" ]
+if [ "${UPLOAD}" = "false" ]
 then
-    log "Get token failure ${HTTP_STATUS}"
-    exit 2
-fi
+    # not uploading - just output the xml
+    cat $PATCHED_OUTPUT
+else
+    # ----------------------------------------------------------------------------
+    # Handle client id and secrets for SBOM scraper via App registrations
+    # ----------------------------------------------------------------------------
+    HTTP_STATUS=""
+    # get token
+    log "Get token ..."
+    HTTP_STATUS=$(curl -sS -w "%{http_code}" \
+        -o "${TEMPDIR}/access_token" \
+        --data-urlencode "grant_type=client_credentials" \
+        --data-urlencode "client_id=${CLIENT_ID}" \
+        --data-urlencode "client_secret=${SECRET}" \
+        "${URL}/archivist/iam/v1/appidp/token")
+    if [ "${HTTP_STATUS}" != "200" ]
+    then
+        log "Get token failure ${HTTP_STATUS}"
+        exit 2
+    fi
 
-TOKEN=$(jq -r .access_token "${TEMPDIR}"/access_token )
+    TOKEN=$(jq -r .access_token "${TEMPDIR}"/access_token )
 
-# create token file
-BEARER_TOKEN_FILE=${TEMPDIR}/token
-cat > "${BEARER_TOKEN_FILE}" <<EOF
+    # create token file
+    BEARER_TOKEN_FILE=${TEMPDIR}/token
+    cat > "${BEARER_TOKEN_FILE}" <<EOF
 Authorization: Bearer $TOKEN
 EOF
-#
-# ----------------------------------------------------------------------------
-# Upload SBOM
-# ----------------------------------------------------------------------------
-log "Upload ${PRIVACY} ${OUTPUT} ..."
+    #
+    # ----------------------------------------------------------------------------
+    # Upload SBOM
+    # ----------------------------------------------------------------------------
+    log "Upload ${PRIVACY} ${OUTPUT} ..."
 
-HTTP_STATUS=$(timeout ${SBOM_UPLOAD_TIMEOUT} \
-    curl -s -w "%{http_code}" -X POST \
-    -o "${TEMPDIR}/upload" \
-    -H "@${BEARER_TOKEN_FILE}" \
-    -H "content_type=text/xml" \
-    -F "sbom=@${PATCHED_OUTPUT}" \
-    "${URL}/archivist/v1/sboms?privacy=${PRIVACY}")
+    HTTP_STATUS=$(timeout ${SBOM_UPLOAD_TIMEOUT} \
+        curl -s -w "%{http_code}" -X POST \
+        -o "${TEMPDIR}/upload" \
+        -H "@${BEARER_TOKEN_FILE}" \
+        -H "content_type=text/xml" \
+        -F "sbom=@${PATCHED_OUTPUT}" \
+        "${URL}/archivist/v1/sboms?privacy=${PRIVACY}")
 
-RETURN_CODE=$?
+    RETURN_CODE=$?
 
-# timeout returns 124 if the command exceeded the time limit
-if [ ${RETURN_CODE} -eq 124 ]
-then
-    log "Upload failure: Timeout"
-    exit 3
-# all other non-zero return codes
-elif [ ${RETURN_CODE} -gt 0 ]
-then
-    log "Upload failure: Error code ${RETURN_CODE}"
-    exit 4
+    # timeout returns 124 if the command exceeded the time limit
+    if [ ${RETURN_CODE} -eq 124 ]
+    then
+        log "Upload failure: Timeout"
+        exit 3
+    # all other non-zero return codes
+    elif [ ${RETURN_CODE} -gt 0 ]
+    then
+        log "Upload failure: Error code ${RETURN_CODE}"
+        exit 4
+    fi
+
+    if [ "${HTTP_STATUS}" != "200" ]
+    then
+        log "Upload failure: HTTP ${HTTP_STATUS}"
+        exit 5
+    fi
+    log "Upload success: "
+    jq . "${TEMPDIR}/upload"
 fi
-
-if [ "${HTTP_STATUS}" != "200" ]
-then
-    log "Upload failure: HTTP ${HTTP_STATUS}"
-    exit 5
-fi
-log "Upload success: "
-jq . "${TEMPDIR}/upload"
 exit 0
