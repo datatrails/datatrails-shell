@@ -228,6 +228,13 @@ then
         exit 3
     fi
 
+    # handle case where syft didn't find sutable substitution for parametrised version number
+    if [ "$COMPONENT_VERSION" = '${parent.version}' ]
+    then
+        echo "syft could not get valid version from archive. Skipping $COMPONENT_NAME"
+        exit 3
+    fi
+
 else
 # ----------------------------------------------------------------------------
 # Deal with dockerfiles - assume that raw sbom files originally came from
