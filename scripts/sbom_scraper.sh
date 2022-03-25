@@ -229,7 +229,7 @@ then
     fi
 
     # handle case where syft didn't find sutable substitution for parametrised version number
-    if [ "$COMPONENT_VERSION" = '${parent.version}' ]
+    if [ "$COMPONENT_VERSION" = "\${parent.version}" ]
     then
         echo "syft could not get valid version from archive. Skipping $COMPONENT_NAME"
         exit 3
