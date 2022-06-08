@@ -425,6 +425,8 @@ author = ET.SubElement(authors, 'author')
 ET.SubElement(author, 'name').text = '$AUTHOR_NAME'
 ET.SubElement(author, 'email').text = '$AUTHOR_EMAIL'
 
+component = metadata.find('component', ns)
+
 # Update component publisher and author
 publisher = component.find('publisher', ns)
 if not publisher:
@@ -436,8 +438,6 @@ if not author:
     author = ET.Element('author')
     component.insert(0, author)
 author.text = '$COMPONENT_AUTHOR_NAME'
-
-component = metadata.find('component', ns)
 
 # Update component name and version
 component.find('name', ns).text = '$COMPONENT_NAME'
@@ -472,7 +472,7 @@ ET.SubElement(supplier, 'url').text = '$SUPPLIER_URL'
 indent(root)
 et.write(sys.stdout, encoding='unicode', xml_declaration=True, default_namespace='')
 END
-)
+) < "$OUTPUT" > "$PATCHED_OUTPUT"
 fi
 
 # ----------------------------------------------------------------------------
