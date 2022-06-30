@@ -498,13 +498,13 @@ else
     HTTP_STATUS=""
     # get token
     log "Get token ..."
-    HTTP_STATUS=$(curl -sS -w "%{http_code}" \
+    HTTP_STATUS=$(curl -sS -w "%{http_code} %{json}" \
         -o "${TEMPDIR}/access_token" \
         --data-urlencode "grant_type=client_credentials" \
         --data-urlencode "client_id=${CLIENT_ID}" \
         --data-urlencode "client_secret=${SECRET}" \
         "${URL}/archivist/iam/v1/appidp/token")
-    if [ "${HTTP_STATUS}" != "200" ]
+    if [ "${HTTP_STATUS:0:1}" != "2" ]
     then
         log "Get token failure ${HTTP_STATUS}"
         exit 2
@@ -524,7 +524,7 @@ EOF
     log "Upload ${PRIVACY} ${OUTPUT} ..."
 
     HTTP_STATUS=$(timeout ${SBOM_UPLOAD_TIMEOUT} \
-        curl -s -w "%{http_code}" -X POST \
+        curl -s -w "%{http_code} %{json}" -X POST \
         -o "${TEMPDIR}/upload" \
         -H "@${BEARER_TOKEN_FILE}" \
         -H "content_type=text/xml" \
@@ -545,9 +545,9 @@ EOF
         exit 4
     fi
 
-    if [ "${HTTP_STATUS}" != "200" ]
+    if [ "${HTTP_STATUS:0:1}" != "2" ]
     then
-        log "Upload failure: HTTP ${HTTP_STATUS}"
+        log "Upload failure ${HTTP_STATUS}"
         exit 5
     fi
     log "Upload success: "
