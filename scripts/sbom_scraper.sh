@@ -403,6 +403,8 @@ et = ET.parse(sys.stdin)
 root = et.getroot()
 
 metadata = root.find('metadata', ns)
+if not metadata:
+    metadata = ET.SubElement(root, 'metadata')
 
 # Add this tool
 tools = metadata.find('tools', ns)
