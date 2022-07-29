@@ -213,7 +213,7 @@ then
     INPUT=$(ls)
     OUTFILE=${INPUT}.${FORMAT}.sbom
     OUTPUT="${TEMPDIR}/${OUTFILE}"
-    syft -q packages --scope all-layers -o "${FORMAT}" "file:${INPUT}" > "${OUTPUT}"
+    syftjar -q packages --scope all-layers -o "${FORMAT}" "file:${INPUT}" > "${OUTPUT}"
     popd > /dev/null
 
     COMPONENT_NAME=$(xq -r .bom.metadata.component.name "$OUTPUT")
