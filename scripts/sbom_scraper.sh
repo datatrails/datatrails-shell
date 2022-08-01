@@ -410,6 +410,7 @@ if not metadata:
 tools = metadata.find('tools', ns)
 if not tools:
     tools = ET.SubElement(metadata, 'tools')
+
 tool = ET.SubElement(tools, 'tool')
 ET.SubElement(tool, 'vendor').text = '$TOOL_VENDOR'
 ET.SubElement(tool, 'name').text = '$TOOL_NAME'
@@ -428,6 +429,8 @@ ET.SubElement(author, 'name').text = '$AUTHOR_NAME'
 ET.SubElement(author, 'email').text = '$AUTHOR_EMAIL'
 
 component = metadata.find('component', ns)
+if not component:
+    component = ET.SubElement(metadata, 'component')
 
 # Update component publisher and author
 publisher = component.find('publisher', ns)
@@ -438,14 +441,21 @@ publisher.text = '$COMPONENT_AUTHOR_NAME'
 author = component.find('author', ns)
 if not author:
     author = ET.Element('author')
-    component.insert(0, author)
+    component.insert(1, author)
 author.text = '$COMPONENT_AUTHOR_NAME'
 
 # Update component name and version
-component.find('name', ns).text = '$COMPONENT_NAME'
+name = component.find('name', ns)
+if not name:
+    name = ET.SubElement(component, 'name')
+
+name.text = '$COMPONENT_NAME'
 component_version = '$COMPONENT_VERSION'
 if component_version:
-    component.find('version', ns).text = component_version
+    version = component.find('version', ns)
+    if not version:
+        version = ET.SubElement(component, 'version')
+    version.text = component_version
 
 # Update component hash
 component_hash_alg = '${COMPONENT_HASH_ALG}'
@@ -460,7 +470,7 @@ if component_hash_alg:
 supplier = component.find('supplier', ns)
 if not supplier:
     supplier = ET.Element('supplier')
-    component.insert(0, supplier)
+    component.insert(4, supplier)
 ET.SubElement(supplier, 'name').text = '$SUPPLIER_NAME'
 ET.SubElement(supplier, 'url').text = '$SUPPLIER_URL'
 
