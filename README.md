@@ -1,6 +1,6 @@
 # archivist-shell
 
-Repository for convenience scripts for the Jitsuin Archivist system.
+Repository for convenience scripts for the RKVST system.
 
 # Development
 

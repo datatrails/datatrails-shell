@@ -74,7 +74,7 @@ TOOL_NAME="https://github.com/jitsuin-inc/archivist-shell $SCRIPTNAME"
 #
 # Set this value just before release
 TOOL_VERSION="v0.3.5"
-TOOL_VENDOR="Jitsuin Inc"
+TOOL_VENDOR="RKVST Inc"
 TOOL_HASH_ALG=SHA-256
 TOOL_HASH_CONTENT=$(shasum -a 256 "$0" | cut -d' ' -f1)
 
