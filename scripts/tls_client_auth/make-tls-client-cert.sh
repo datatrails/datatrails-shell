@@ -5,7 +5,7 @@ SCRIPTDIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" >/dev/null 2>&1 && pwd )"
 SCRIPTNAME=$(basename "$0")
 
 AUTHORITY="test"
-ARCHIVIST_HOST="rkvst.poc.jitsuin.io"
+ARCHIVIST_HOST="app.rkvst-poc.io"
 TLSARCHIVIST_HOST="auth.$ARCHIVIST_HOST"
 
 # check that the required tools are installed
@@ -15,7 +15,7 @@ usage() {
     cat >&2 <<EOF
 
 Create and configure a TLS certificate authority and TLS client certificate for
-use with Jitsuin Archivist
+use with RKVST
 
 Usage: $SCRIPTNAME [-a AUTHORITY] COMMON_NAME
 
