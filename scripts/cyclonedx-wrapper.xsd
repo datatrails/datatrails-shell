@@ -1,5 +1,0 @@
-<?xml version="1.0" encoding="UTF-8"?>
-<schema elementFormDefault="qualified" xmlns="http://www.w3.org/2001/XMLSchema">
-  <import namespace="http://cyclonedx.org/schema/spdx" schemaLocation="spdx.xsd"/>
-  <import namespace="http://cyclonedx.org/schema/bom/1.3" schemaLocation="cyclonedx.xsd"/>
-</schema>

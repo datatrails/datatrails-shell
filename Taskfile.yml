@@ -2,6 +2,11 @@ version: '3'
 
 tasks:
 
+  build-scraper:
+    desc: Build scraper image
+    cmds:
+      - docker build --no-cache -f Dockerfile-scraper -t archivist-shell-scraper .
+
   check:
     desc: Standard linting of shell scripts
     cmds:
@@ -11,3 +16,17 @@ tasks:
     desc: Clean git repo
     cmds:
       - git clean -fdX
+
+  scrape:
+    desc: Execute scraper command in dockerfile
+    cmds:
+      - |
+        docker run \
+          --rm -it \
+          -v $(pwd):$(pwd) \
+          -w $(pwd) \
+          -u $(id -u):$(id -g) \
+          -e USER \
+          archivist-shell-scraper \
+          {{.CLI_ARGS}}
+
