@@ -16,22 +16,18 @@
 # file should reside in a subdirectory with 0700 permissions.
 #
 # Use the CLIENT_ID as the first fixed argument to this script.
-# 
-
-SCRIPTDIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" >/dev/null 2>&1 && pwd )"
-SCRIPTNAME=$(basename "$0")
 #
-# cdx - https://github.com/CycloneDX/cyclonedx-cli/releases/tag/v0.22.0
-# jar, jdeps - sudo apt install default-jre
-# syft - https://github.com/anchore/syft/releases/tag/v0.37.10
-# jq - sudo apt install jq
-# xq - python3 -m pip install --user yq
-# xmllint - sudo apt install libxml2-utils
-# python3 - should come with distro
-# openssl - sudo apt install openssl
+# cdx - https://github.com/CycloneDX/cyclonedx-cli/releases/tag/v0.24.2
 # curl - sudo apt install curl
+# jar, jdeps - sudo apt install default-jdk
+# jq - sudo apt install jq
+# openssl - sudo apt install openssl
+# python3 - should come with distro
+# shasum - libdigest-sha-perl
+# syft - https://github.com/anchore/syft/releases/tag/v0.60.3
+# xq - python3 -m pip install --user yq
 NOTFOUND=0
-for TOOL in cdx jar jdeps syft jq xq xmllint python3 openssl curl shasum
+for TOOL in cdx jar jdeps syft jq xq python3 openssl curl shasum
 do
     if ! type $TOOL > /dev/null
     then
@@ -44,6 +40,7 @@ then
     echo >&2 "Some tools not found"
     exit 10
 fi
+CDX_VERSION=$(cdx --version)
 SYFT_VERSION=$(syft version | grep '^Version' | tr -s ' ' | cut -d' ' -f2)
 compare_version() {
     local x=$1
@@ -51,13 +48,14 @@ compare_version() {
     last=${x##*.}           # Delete up to last dot.
     mid=${x##"$first".}       # Delete first number and dot.
     mid=${mid%%."$last"}      # Delete dot and last number.
-    if [ "$mid" -lt 34 ]
+    if [ "$mid" -lt "$3" ]
     then
-        echo >&2 "syft must be at least version 0.34.0"
+        echo >&2 "$2 must be at least version 0.$3.0"
         exit 10
     fi
 }
-compare_version "${SYFT_VERSION}"
+compare_version "${SYFT_VERSION}"  syft  60
+compare_version "${CDX_VERSION}"  cdx  24
 
 set -e
 set -u
@@ -70,10 +68,10 @@ log() {
 # ----------------------------------------------------------------------------
 # Option parsing
 # ----------------------------------------------------------------------------
-TOOL_NAME="https://github.com/jitsuin-inc/archivist-shell $SCRIPTNAME"
+TOOL_NAME="https://github.com/jitsuin-inc/archivist-shell sbom_scraper.sh"
 #
-# Set this value just before release
-TOOL_VERSION="v0.5.1"
+# Set this value and merge the change just before release
+TOOL_VERSION="v0.6.0"
 TOOL_VENDOR="RKVST Inc"
 TOOL_HASH_ALG=SHA-256
 TOOL_HASH_CONTENT=$(shasum -a 256 "$0" | cut -d' ' -f1)
@@ -87,7 +85,7 @@ COMPONENT_AUTHOR_NAME="$DEFAULT_AUTHOR_NAME"
 SBOM_UPLOAD_TIMEOUT=10
 # shellcheck disable=SC2002
 # credentials directory should have 0700 permissions
-CLIENTSECRET_FILE=$SCRIPTDIR/../credentials/client_secret
+CLIENTSECRET_FILE=credentials/client_secret
 SBOM=false
 PRIVACY=PUBLIC
 JARFILE=false
@@ -98,9 +96,9 @@ URL=https://app.rkvst.io
 usage() {
     cat >&2 <<EOF
 
-Create a Cyclone DX 1.3 XML SBOM from a docker image and upload to RKVST SBOM Hub
+Create a Cyclone DX 1.4 XML SBOM from a docker image and upload to RKVST SBOM Hub
 
-Usage: $SCRIPTNAME [-a AUTHOR_NAME] [-A COMPONENT_AUTHOR] [-c CLIENT_SECRET_FILE] [-e AUTHOR_EMAIL] [-sp] [-u URL] CLIENT_ID [docker-image:tag|sbom file|jar URL]
+Usage: sbom_scraper.sh [-a AUTHOR_NAME] [-A COMPONENT_AUTHOR] [-c CLIENT_SECRET_FILE] [-e AUTHOR_EMAIL] [-sp] [-u URL] CLIENT_ID [docker-image:tag|sbom file|jar URL]
 
    -a AUTHOR             name of the author of the SBOM.  Default ($AUTHOR_NAME)
    -A COMPONENT_AUTHOR   name of the author and publisher of the docker image.  Default ($COMPONENT_AUTHOR_NAME)
@@ -265,9 +263,17 @@ else
     COMPONENT_HASH_CONTENT="${ORIG_COMPONENT_VERSION##*:}"
 fi
 
+if [ "${UPLOAD}" = "false" ]
+then
+    # not uploading - just output the xml
+    cat "${OUTPUT}" > sbom.xml
+    echo "Downloaded xml file is in sbom.xml"
+fi
+
 if [ "$UPLOAD" = "true" ]
 then
 
+# Order is important....
 cat >&1 <<EOF
 metadata:
   tools:
@@ -338,11 +344,11 @@ def indent(elem, level=0):
         if level and (not elem.tail or not elem.tail.strip()):
             elem.tail = i
 
-ET.register_namespace('', 'http://cyclonedx.org/schema/bom/1.3')
-ns = {'': 'http://cyclonedx.org/schema/bom/1.3'}
+ET.register_namespace('', 'http://cyclonedx.org/schema/bom/1.4')
+ns = {'': 'http://cyclonedx.org/schema/bom/1.4'}
 
 # Open original file
-et = ET.parse(sys.stdin)
+et = ET.parse("$OUTPUT")
 root = et.getroot()
 
 metadata = root.find('metadata', ns)
@@ -370,9 +376,9 @@ ET.SubElement(author, 'email').text = '$AUTHOR_EMAIL'
 
 indent(root)
 
-et.write(sys.stdout, encoding='unicode', xml_declaration=True, default_namespace='')
+et.write("$PATCHED_OUTPUT", encoding='unicode', xml_declaration=True, default_namespace='')
 END
-) < "$OUTPUT" > "$PATCHED_OUTPUT"
+)
 
 else
 
@@ -395,11 +401,11 @@ def indent(elem, level=0):
         if level and (not elem.tail or not elem.tail.strip()):
             elem.tail = i
 
-ET.register_namespace('', 'http://cyclonedx.org/schema/bom/1.3')
-ns = {'': 'http://cyclonedx.org/schema/bom/1.3'}
+ET.register_namespace('', 'http://cyclonedx.org/schema/bom/1.4')
+ns = {'': 'http://cyclonedx.org/schema/bom/1.4'}
 
 # Open original file
-et = ET.parse(sys.stdin)
+et = ET.parse("$OUTPUT")
 root = et.getroot()
 
 metadata = root.find('metadata', ns)
@@ -427,82 +433,116 @@ if not authors:
 author = ET.SubElement(authors, 'author')
 ET.SubElement(author, 'name').text = '$AUTHOR_NAME'
 ET.SubElement(author, 'email').text = '$AUTHOR_EMAIL'
+ 
+# Update component - the selected fields are inspected as to whether they
+# already exist - if they do they are removed and replaced with a new
+# instance with the correct value.
+#
+# CAVEAT: only (supplier, author, publisher, name, version, hashes) fields are
+# altered. The ElementTree module does not preserve order - unfortunately XML 
+# schema validation requires order (defined as a sequence).
+
+# Full list of fields in order from schema 1.4 is 
+# (supplier, author, publisher, group, name, version, description, scope, hashes,
+#  licenses, copyright, cpe, purl, swid, modified, pedigree, externalReferences,
+#  properties, components, evidence, releaseNotes, ##other)
+#
+# plus  (type, mime-type, bom-ref, ##any) in any order.
+#
+# Note that ##other is a wildcard of an attribute from another namespace and ##any
+# is a wildcard of user-defined attributes.
 
 component = metadata.find('component', ns)
-if not component:
+if component is None:
     component = ET.SubElement(metadata, 'component')
-
-# Update component publisher and author
-publisher = component.find('publisher', ns)
-if not publisher:
-    publisher = ET.Element('publisher')
-    component.insert(0, publisher)
-publisher.text = '$COMPONENT_AUTHOR_NAME'
-author = component.find('author', ns)
-if not author:
-    author = ET.Element('author')
-    component.insert(1, author)
-author.text = '$COMPONENT_AUTHOR_NAME'
-
-# Update component name and version
-name = component.find('name', ns)
-if not name:
-    name = ET.SubElement(component, 'name')
-
-name.text = '$COMPONENT_NAME'
-component_version = '$COMPONENT_VERSION'
-if component_version:
-    version = component.find('version', ns)
-    if not version:
-        version = ET.SubElement(component, 'version')
-    version.text = component_version
-
-# Update component hash
-component_hash_alg = '${COMPONENT_HASH_ALG}'
-if component_hash_alg:
-    hashes = component.find('hashes', ns)
-    if not hashes:
-        hashes = ET.SubElement(component, 'hashes')
-    hash = ET.SubElement(hashes, 'hash', alg=component_hash_alg)
-    hash.text = '$COMPONENT_HASH_CONTENT'
 
 # Add component supplier
 supplier = component.find('supplier', ns)
-if not supplier:
-    supplier = ET.Element('supplier')
-    component.insert(4, supplier)
+if supplier is not None:
+    component.remove(supplier)
+supplier = ET.Element('supplier')
 ET.SubElement(supplier, 'name').text = '$SUPPLIER_NAME'
 ET.SubElement(supplier, 'url').text = '$SUPPLIER_URL'
+component.append(supplier)
 
-# Add supplier (it appears twice in the schema)
-supplier = metadata.find('supplier', ns)
-if not supplier:
-    supplier = ET.SubElement(metadata, 'supplier')
-ET.SubElement(supplier, 'name').text = '$SUPPLIER_NAME'
-ET.SubElement(supplier, 'url').text = '$SUPPLIER_URL'
+# Update component author
+author = component.find('author', ns)
+if author is not None:
+    component.remove(author)
+author = ET.Element('author')
+author.text = '$COMPONENT_AUTHOR_NAME'
+component.append(author)
+
+# Update component publisher
+publisher = component.find('publisher', ns)
+if publisher is not None:
+    component.remove(publisher)
+publisher = ET.Element('publisher')
+publisher.text = '$COMPONENT_AUTHOR_NAME'
+component.append(publisher)
+
+group = component.find('group', ns)
+if group is not None:
+    component.append(group)
+
+# Update component name
+name = component.find('name', ns)
+if name is not None:
+    component.remove(name)
+name = ET.Element('name')
+name.text = '$COMPONENT_NAME'
+component.append(name)
+
+# Update component version
+component_version = '$COMPONENT_VERSION'
+version = component.find('version', ns)
+if component_version:
+    if version is not None:
+        component.remove(version)
+    version = ET.Element('version')
+    version.text = component_version
+
+if version is not None:
+    component.append(version)
+
+description = component.find('description', ns)
+if description is not None:
+    component.append(description)
+
+scope = component.find('scope', ns)
+if scope is not None:
+    component.append(scope)
+
+# Update component hash
+component_hash_alg = '${COMPONENT_HASH_ALG}'
+hashes = component.find('hashes', ns)
+if component_hash_alg:
+    if hashes is not None:
+        component.remove(hashes)
+    hashes = ET.Element('hashes')
+    hash = ET.SubElement(hashes, 'hash', alg=component_hash_alg)
+    hash.text = '$COMPONENT_HASH_CONTENT'
+
+if hashes is not None:
+    component.append(hashes)
+
+for f in ('licenses', 'copyright', 'cpe', 'purl', 'swid', 'modified', 'pedigree', 'externalReferences',
+          'properties', 'components', 'evidence', 'releaseNotes'):
+    val = component.find(f, ns)
+    if val is not None:
+        component.append(val)
 
 indent(root)
-et.write(sys.stdout, encoding='unicode', xml_declaration=True, default_namespace='')
+et.write("$PATCHED_OUTPUT", encoding='unicode', xml_declaration=True, default_namespace='')
 END
-) < "$OUTPUT" > "$PATCHED_OUTPUT"
+)
 fi
-
-# ----------------------------------------------------------------------------
-# Check that the patched SBOM is valid against the cyclonedx schema
-# ----------------------------------------------------------------------------
-[ -f "$SCRIPTDIR"/spdx.xsd ] || curl -fsS -o "$SCRIPTDIR"/spdx.xsd https://cyclonedx.org/schema/spdx
-[ -f "$SCRIPTDIR"/cyclonedx.xsd ] || curl -fsS -o "$SCRIPTDIR"/cyclonedx.xsd https://cyclonedx.org/schema/bom/1.3
-
-# xmllint complains about a double import of the spdx schema, but we have to import via
-# the wrapper to set the schema location to a local file, as xmllint fails to download
-# them from the internet as they are https
-_=$(xmllint "$PATCHED_OUTPUT" --schema "$SCRIPTDIR"/cyclonedx-wrapper.xsd --noout 2>&1 | grep -Fv "Skipping import of schema located at 'http://cyclonedx.org/schema/spdx' for the namespace 'http://cyclonedx.org/schema/spdx'")
-[ "${PIPESTATUS[0]}" -ne 0 ] && cat "${PATCHED_OUTPUT}" && exit "${PIPESTATUS[0]}"
 
 if [ "${UPLOAD}" = "false" ]
 then
     # not uploading - just output the xml
-    cat "${PATCHED_OUTPUT}"
+    cat "${PATCHED_OUTPUT}" > sbom-patched.xml
+    echo "Patched xml is in sbom-patched.xml"
 else
     # ----------------------------------------------------------------------------
     # Handle client id and secrets for SBOM scraper via App registrations
@@ -550,6 +590,7 @@ EOF
     then
         log "Upload failure: Timeout"
         exit 3
+
     # all other non-zero return codes
     elif [ ${RETURN_CODE} -gt 0 ]
     then

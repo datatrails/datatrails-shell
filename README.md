@@ -87,6 +87,20 @@ Make a change to the code and validate the changes:
 task check
 ```
 
+And then test changes with a working set of options:
+
+```bash
+task build-scraper
+task scrape -- -h
+task scrape -- -a "RKVST, Inc" \
+               -e support@rkvst.com \
+               -A Docker \
+               -c credentials/client_secret \
+               -u https://app.rkvst.io \
+               8f8f2467-01fe-48fb-891a-5c0be643cec1 \
+               aerospike:ce-6.0.0.5
+```
+
 ### Seeking a review
 
 #### Synchronizing the upstream

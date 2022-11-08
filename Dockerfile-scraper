@@ -1,0 +1,42 @@
+FROM ubuntu:jammy
+
+RUN apt-get update \
+  && apt-get upgrade -y --no-install-recommends \
+  && apt-get install -y \
+        curl \
+        default-jdk \
+        jq \
+        libdigest-sha-perl \
+        openssl \
+        python3-pip \
+  && apt-get autoremove \
+  && apt-get autoclean \
+  && apt-get clean \
+  && rm -rf /var/lib/apt/lists/*
+
+RUN python3 -m pip install yq
+
+RUN curl -fsSOL https://github.com/CycloneDX/cyclonedx-cli/releases/download/v0.24.2/cyclonedx-linux-x64 \
+  && mv cyclonedx-linux-x64 /usr/local/bin/cdx \
+  && chmod +x /usr/local/bin/cdx \
+  && curl -fsSOL https://github.com/anchore/syft/releases/download/v0.60.3/syft_0.60.3_linux_amd64.tar.gz \
+  && tar xvzf syft_0.60.3_linux_amd64.tar.gz syft \
+  && mv syft /usr/local/bin \
+  && chmod +x /usr/local/bin/syft \
+  && rm syft_0.60.3_linux_amd64.tar.gz
+
+RUN which cdx \
+  && which curl \
+  && which jar \
+  && which jdeps \
+  && which jq \
+  && which openssl \
+  && which python3 \
+  && which shasum \
+  && which syft \
+  && which xq
+
+COPY scripts/sbom_scraper.sh /usr/local/bin/sbom_scraper.sh
+RUN chmod +x /usr/local/bin/sbom_scraper.sh
+
+ENTRYPOINT ["/usr/local/bin/sbom_scraper.sh"]
