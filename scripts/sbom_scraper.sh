@@ -71,7 +71,7 @@ log() {
 TOOL_NAME="https://github.com/jitsuin-inc/archivist-shell sbom_scraper.sh"
 #
 # Set this value and merge the change just before release
-TOOL_VERSION="v0.6.0"
+TOOL_VERSION="v0.6.2"
 TOOL_VENDOR="RKVST Inc"
 TOOL_HASH_ALG=SHA-256
 TOOL_HASH_CONTENT=$(shasum -a 256 "$0" | cut -d' ' -f1)
@@ -376,7 +376,7 @@ ET.SubElement(author, 'email').text = '$AUTHOR_EMAIL'
 
 indent(root)
 
-et.write("$PATCHED_OUTPUT", encoding='unicode', xml_declaration=True, default_namespace='')
+et.write("$PATCHED_OUTPUT", encoding='unicode', xml_declaration=True, default_namespace='', short_empty_elements=False)
 END
 )
 
@@ -533,7 +533,7 @@ for f in ('licenses', 'copyright', 'cpe', 'purl', 'swid', 'modified', 'pedigree'
         component.append(val)
 
 indent(root)
-et.write("$PATCHED_OUTPUT", encoding='unicode', xml_declaration=True, default_namespace='')
+et.write("$PATCHED_OUTPUT", encoding='unicode', xml_declaration=True, default_namespace='', short_empty_elements=False)
 END
 )
 fi
