@@ -16,14 +16,17 @@ RUN apt-get update \
 
 RUN python3 -m pip install yq
 
-RUN curl -fsSOL https://github.com/CycloneDX/cyclonedx-cli/releases/download/v0.24.2/cyclonedx-linux-x64 \
+ENV CDX_VERSION 0.24.2
+ENV SYFT_VERSION 0.62.1
+
+RUN curl -fsSOL https://github.com/CycloneDX/cyclonedx-cli/releases/download/v${CDX_VERSION}/cyclonedx-linux-x64 \
   && mv cyclonedx-linux-x64 /usr/local/bin/cdx \
   && chmod +x /usr/local/bin/cdx \
-  && curl -fsSOL https://github.com/anchore/syft/releases/download/v0.60.3/syft_0.60.3_linux_amd64.tar.gz \
-  && tar xvzf syft_0.60.3_linux_amd64.tar.gz syft \
+  && curl -fsSOL https://github.com/anchore/syft/releases/download/v${SYFT_VERSION}/syft_${SYFT_VERSION}_linux_amd64.tar.gz \
+  && tar xvzf syft_${SYFT_VERSION}_linux_amd64.tar.gz syft \
   && mv syft /usr/local/bin \
   && chmod +x /usr/local/bin/syft \
-  && rm syft_0.60.3_linux_amd64.tar.gz
+  && rm syft_${SYFT_VERSION}_linux_amd64.tar.gz
 
 RUN which cdx \
   && which curl \

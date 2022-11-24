@@ -600,10 +600,10 @@ EOF
 
     if [ "${HTTP_STATUS:0:1}" != "2" ]
     then
-        log "Upload failure ${HTTP_STATUS}"
+        log "Upload failure ${HTTP_STATUS} :"
+        cat "${TEMPDIR}/upload"
         exit 5
     fi
-    log "Upload success: "
-    jq . "${TEMPDIR}/upload"
+    log "Upload success"
 fi
 exit 0
