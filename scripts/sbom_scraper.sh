@@ -68,7 +68,7 @@ log() {
 # ----------------------------------------------------------------------------
 # Option parsing
 # ----------------------------------------------------------------------------
-TOOL_NAME="https://github.com/jitsuin-inc/archivist-shell sbom_scraper.sh"
+TOOL_NAME="https://github.com/rkvst/rkvst-shell sbom_scraper.sh"
 #
 # Set this value and merge the change just before release
 TOOL_VERSION="v0.6.2"
@@ -177,9 +177,13 @@ TEMPDIR=$( mktemp -d /tmp/.sbom_scraper.XXXXXXXX )
 
 # report on exit
 function finalise {
+    # See exit 0 code at bottom of file.
+    # shellcheck disable=SC2317
     CODE=$?
+    # shellcheck disable=SC2317
     rm -rf "$TEMPDIR"
-    exit $CODE
+    # shellcheck disable=SC2317
+    exit "$CODE"
 }
 trap finalise EXIT INT TERM
 
@@ -606,4 +610,7 @@ EOF
     fi
     log "Upload success"
 fi
+# this triggers a false shellcheck warning SC2317
+# See https://github.com/koalaman/shellcheck/issues/2542
+# Disabled in the finalise function above.
 exit 0
