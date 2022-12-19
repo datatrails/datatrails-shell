@@ -1,9 +1,9 @@
-# Contributing to archivist-shell #
+# Contributing to rkvst-shell #
 
-Thanks for taking the time to contribute to archivist-shell!
+Thanks for taking the time to contribute to rkvst-shell!
 
 Contributing is not limited to writing code and submitting a PR. Feel free to submit an
-[issue](https://github.com/jitsuin-inc/archivist-shell/issues/new/choose) or comment on an existing one
+[issue](https://github.com/rkvst/rkvst-shell/issues/new/choose) or comment on an existing one
 to report a bug, provide feedback, or suggest a new feature.
 
 Of course, contributing code is more than welcome! To keep things simple, if you're fixing a small issue,

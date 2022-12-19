@@ -1,4 +1,4 @@
-# archivist-shell
+# rkvst-shell
 
 Repository for convenience scripts for the RKVST system.
 
@@ -47,21 +47,21 @@ Host *
 ```
 > i.e. 'githubUserHandle' viz:
 >
->    git clone ssh-githubUserHandle:githubUserHandle/archivist-shell.git
+>    git clone ssh-githubUserHandle:githubUserHandle/rkvst-shell.git
 >
 
 
 ```bash
 mkdir githubUserHandle
 cd githubUserHandle
-git clone ssh-githubUserHandle:githubUserHandle/archivist-shell.git
+git clone ssh-githubUserHandle:githubUserHandle/rkvst-shell.git
 ```
 
 Enter the new cloned fork and add the original upstream repo as a remote:
 
 ```bash
-cd archivist-shell
-git remote add upstream ssh-githubUserHandle:jitsuin-inc/archivist-shell.git
+cd rkvst-shell
+git remote add upstream ssh-githubUserHandle:rkvst/rkvst-shell.git
 git remote -v
 ```
 
@@ -138,7 +138,7 @@ Push the changes upstream(the set-upstream option is only required the first tim
 git push --set-upstream origin dev/githubUserHandle/some-proposed-fix
 ```
 
-Enter the github ui at https://github.com/jitsuin-inc/archivist-shell and 
+Enter the github ui at https://github.com/rkvst/rkvst-shell and 
 generate a pull request.
 
 Reviewers will be notified when a PR is generated and you will receive feedback.
