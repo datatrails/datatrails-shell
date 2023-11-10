@@ -9,7 +9,7 @@
 #    Read the docs on syft usage.
 #
 # Create App registration called "SBOM scraper" following the flow described in
-# https://docs.rkvst.com/docs/setup-and-administration/getting-access-tokens-using-app-registrations/#using-the-rkvst-ui-(required-for-first-time-setup)
+# https://docs.datatrails.com/docs/setup-and-administration/getting-access-tokens-using-app-registrations/#using-the-datatrails-ui-(required-for-first-time-setup)
 # and note down the CLIENT_ID and SECRET.
 #
 # Copy the SECRET generated to the file specified by ${CLIENTSECRET_FILE} below. This
@@ -68,11 +68,11 @@ log() {
 # ----------------------------------------------------------------------------
 # Option parsing
 # ----------------------------------------------------------------------------
-TOOL_NAME="https://github.com/rkvst/rkvst-shell sbom_scraper.sh"
+TOOL_NAME="https://github.com/datatrails/datatrails-shell sbom_scraper.sh"
 #
 # Set this value and merge the change just before release
 TOOL_VERSION="v0.6.2"
-TOOL_VENDOR="RKVST Inc"
+TOOL_VENDOR="DataTrails Inc"
 TOOL_HASH_ALG=SHA-256
 TOOL_HASH_CONTENT=$(shasum -a 256 "$0" | cut -d' ' -f1)
 
@@ -91,12 +91,12 @@ PRIVACY=PUBLIC
 JARFILE=false
 UPLOAD=true
 
-URL=https://app.rkvst.io
+URL=https://app.datatrails.ai
 
 usage() {
     cat >&2 <<EOF
 
-Create a Cyclone DX 1.4 XML SBOM from a docker image and upload to RKVST SBOM Hub
+Create a Cyclone DX 1.4 XML SBOM from a docker image and upload to DataTrails SBOM Hub
 
 Usage: sbom_scraper.sh [-a AUTHOR_NAME] [-A COMPONENT_AUTHOR] [-c CLIENT_SECRET_FILE] [-e AUTHOR_EMAIL] [-sp] [-u URL] CLIENT_ID [docker-image:tag|sbom file|jar URL]
 
