@@ -1,6 +1,6 @@
-# rkvst-shell
+# datatrails-shell
 
-Repository for convenience scripts for the RKVST system.
+Repository for convenience scripts for the DataTrails system.
 
 # Development
 
@@ -47,21 +47,21 @@ Host *
 ```
 > i.e. 'githubUserHandle' viz:
 >
->    git clone ssh-githubUserHandle:githubUserHandle/rkvst-shell.git
+>    git clone ssh-githubUserHandle:githubUserHandle/datatrails-shell.git
 >
 
 
 ```bash
 mkdir githubUserHandle
 cd githubUserHandle
-git clone ssh-githubUserHandle:githubUserHandle/rkvst-shell.git
+git clone ssh-githubUserHandle:githubUserHandle/datatrails-shell.git
 ```
 
 Enter the new cloned fork and add the original upstream repo as a remote:
 
 ```bash
-cd rkvst-shell
-git remote add upstream ssh-githubUserHandle:rkvst/rkvst-shell.git
+cd datatrails-shell
+git remote add upstream ssh-githubUserHandle:datatrails/datatrails-shell.git
 git remote -v
 ```
 
@@ -92,11 +92,11 @@ And then test changes with a working set of options:
 ```bash
 task build-scraper
 task scrape -- -h
-task scrape -- -a "RKVST, Inc" \
-               -e support@rkvst.com \
+task scrape -- -a "DataTrails, Inc" \
+               -e support@datatrails.ai \
                -A Docker \
                -c credentials/client_secret \
-               -u https://app.rkvst.io \
+               -u https://app.datatrails.ai \
                8f8f2467-01fe-48fb-891a-5c0be643cec1 \
                aerospike:ce-6.0.0.5
 ```
@@ -138,7 +138,7 @@ Push the changes upstream(the set-upstream option is only required the first tim
 git push --set-upstream origin dev/githubUserHandle/some-proposed-fix
 ```
 
-Enter the github ui at https://github.com/rkvst/rkvst-shell and 
+Enter the github ui at https://github.com/datatrails/datatrails-shell and 
 generate a pull request.
 
 Reviewers will be notified when a PR is generated and you will receive feedback.
